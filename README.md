@@ -49,14 +49,18 @@ You need these accounts and subscriptions before starting:
 | **Claude Pro/Team/Enterprise subscription** | Claude Code CLI requires a paid Anthropic plan | $20+/mo |
 | **Claude Code CLI** | The orchestrator — runs on your Mac, handles all routing | Included with Claude sub |
 | **Supabase account** | Database for all persistent data (thoughts, tasks, habits) | Free tier works |
-| **OpenRouter API key** | Embeddings (text-embedding-3-small) and metadata extraction (gpt-4o-mini) for the brain MCP server | Pay-per-use, ~$5 to start |
+| **OpenRouter API key** | Generates vector embeddings for semantic search (text-embedding-3-small) and fallback metadata extraction (gpt-4o-mini) — runs inside the brain MCP edge function | Pay-per-use, ~$5 to start |
 | **Telegram account** | Create a bot for Life Engine notifications and conversational input | Free |
 | **Google account** | Calendar integration for meeting prep and briefings | Free |
 | **A Mac that stays on** | Claude Code runs continuously to handle Telegram messages | Any Mac (Mini recommended) |
 
 ## Setup
 
-### Step 1: Create Supabase Project
+### Step 1: Create a Supabase Project
+
+**What**: Supabase is your database — it stores every thought you capture, every task you create, every briefing the Life Engine sends. It also hosts the brain MCP edge function that Claude talks to.
+
+**Why**: You need a persistent store that Claude can read/write from any client (Claude.ai, Claude Code, scheduled triggers). Supabase gives you a Postgres database with pgvector for semantic search, edge functions for the MCP server, and pg_net for sending Telegram messages directly from SQL.
 
 1. Go to [supabase.com](https://supabase.com) and create a new project
 2. Note your **project ref** (in the URL: `supabase.com/project/YOUR_PROJECT_REF`)
@@ -66,22 +70,32 @@ You need these accounts and subscriptions before starting:
 
 ### Step 2: Run Schema Migrations
 
+**What**: These SQL files create the tables, indexes, search functions, and helper functions that power the brain and Life Engine.
+
+**Why**: The brain needs tables for thoughts and documents with vector columns for semantic search. The Life Engine needs tables for tasks, habits, briefings, and check-ins to track your day and avoid sending duplicate messages.
+
 In the Supabase SQL Editor, run each file in order:
 
-1. `schema/001_core_brain.sql` — Core tables (thoughts, documents, chunks, search functions)
-2. `schema/002_life_engine.sql` — Life Engine tables (tasks, habits, briefings, check-ins)
-3. `schema/003_telegram_helper.sql` — Telegram messaging function (**edit bot token and chat ID first**)
-4. `schema/004_heartbeat_watchdog.sql` — Optional: liveness monitoring (**edit bot token and chat ID first**)
-
-**Important**: Before running 003 and 004, replace `YOUR_TELEGRAM_BOT_TOKEN` and `YOUR_TELEGRAM_CHAT_ID` with your actual values.
+1. `schema/001_core_brain.sql` — Creates the `thoughts`, `documents`, and `document_chunks` tables with pgvector embeddings. Also creates `search_brain()`, a unified semantic search function that queries across both thoughts and document chunks.
+2. `schema/002_life_engine.sql` — Creates the Life Engine tables: `life_engine_tasks` (your to-do list), `life_engine_habits` + `life_engine_habit_log` (habit tracking), `life_engine_briefings` (log of every message sent, used for dedup), `life_engine_checkins` (mood/energy check-ins), and `life_engine_evolution` (self-improvement suggestions).
+3. `schema/003_telegram_helper.sql` — Creates `send_telegram_message()`, a Postgres function that sends Telegram messages via HTTP using pg_net. This is how the scheduled trigger delivers briefings without needing a local Telegram plugin. **Edit the bot token and chat ID before running.**
+4. `schema/004_heartbeat_watchdog.sql` — *Optional.* Creates a pg_cron job that checks every 5 minutes whether the Life Engine is still running. If no heartbeat in 90 minutes during waking hours, it alerts you via Telegram. **Edit the bot token and chat ID before running.**
 
 ### Step 3: Get an OpenRouter API Key
 
+**What**: OpenRouter provides the embedding model that converts text into vectors for semantic search.
+
+**Why**: When you capture a thought, the brain MCP server needs to convert it into a 1536-dimensional vector so it can be found later via similarity search. When you search, your query is also embedded and compared against stored vectors. OpenRouter routes these requests to OpenAI's text-embedding-3-small model. It also provides gpt-4o-mini for automatic metadata extraction (people, topics, action items) as a fallback — though Claude Code typically handles extraction itself.
+
 1. Sign up at [openrouter.ai](https://openrouter.ai)
 2. Create an API key
-3. Add credits ($5 is plenty to start — embeddings are cheap)
+3. Add credits ($5 is plenty to start — embeddings cost ~$0.02 per million tokens)
 
 ### Step 4: Deploy the Brain MCP Edge Function
+
+**What**: The brain MCP server is a Supabase Edge Function that exposes your knowledge base as MCP tools — `capture_thought`, `search_thoughts`, `list_tasks`, `create_task`, etc.
+
+**Why**: MCP (Model Context Protocol) is how Claude connects to external data sources. By deploying your brain as an MCP server, any Claude client — Claude.ai in the browser, Claude Code in the terminal, or a scheduled trigger in the cloud — can read and write to your knowledge base using the same tools.
 
 ```bash
 # Install Supabase CLI if you haven't
@@ -92,11 +106,11 @@ supabase secrets set --project-ref YOUR_PROJECT_REF \
   OPENROUTER_API_KEY=your-key \
   MCP_ACCESS_KEY=$(openssl rand -hex 32)
 
-# Deploy (--no-verify-jwt is required for MCP connectors)
+# Deploy (--no-verify-jwt is required for MCP connectors to call it)
 supabase functions deploy brain-mcp --use-api --project-ref YOUR_PROJECT_REF --no-verify-jwt
 ```
 
-Note your `MCP_ACCESS_KEY` — you need it for the next step.
+Note your `MCP_ACCESS_KEY` — you need it for the next step. This key protects your brain from unauthorized access.
 
 Your MCP server is now live at:
 ```
@@ -105,13 +119,17 @@ https://YOUR_PROJECT_REF.supabase.co/functions/v1/brain-mcp?key=YOUR_MCP_ACCESS_
 
 ### Step 5: Connect Brain MCP to Claude.ai
 
+**What**: Register your brain MCP server as a connector in Claude.ai so Claude can use your brain tools.
+
+**Why**: Scheduled triggers run on claude.ai's infrastructure, not on your Mac. They need a cloud-accessible MCP connector to reach your brain. This step also makes your brain available in Claude.ai web conversations.
+
 1. Go to [claude.ai/settings/connectors](https://claude.ai/settings/connectors)
 2. Add a new MCP connector with the URL from Step 4
 3. Name it something like "brain-stack"
 
 This gives Claude.ai (and scheduled triggers) access to your brain tools: `capture_thought`, `search_thoughts`, `list_tasks`, etc.
 
-You can also add it to Claude Code's local MCP config:
+You can also add it to Claude Code's local MCP config for direct access:
 ```json
 {
   "mcpServers": {
@@ -125,6 +143,10 @@ You can also add it to Claude Code's local MCP config:
 
 ### Step 6: Create a Telegram Bot
 
+**What**: A Telegram bot that serves as your primary interface — you message it to interact with your brain, and it messages you with Life Engine briefings.
+
+**Why**: Telegram is the communication layer. You text the bot naturally ("remember this", "what's on my schedule", "add task: finish report"). Claude Code receives these messages via the Telegram plugin and routes them. The Life Engine also sends proactive briefings to this bot via the `send_telegram_message()` SQL function.
+
 1. Message [@BotFather](https://t.me/BotFather) on Telegram
 2. Send `/newbot` and follow the prompts
 3. Copy the **bot token**
@@ -136,8 +158,13 @@ Test it:
 ```sql
 SELECT send_telegram_message('Brain Stack is alive!');
 ```
+You should receive a Telegram message within a few seconds.
 
 ### Step 7: Set Up Telegram Plugin in Claude Code
+
+**What**: Install the Telegram plugin in Claude Code so it can receive and respond to your bot messages.
+
+**Why**: The Telegram plugin turns Claude Code into a live responder. When you message your bot, the message arrives as a "channel event" in Claude Code. Claude reads it, decides what to do (capture a thought, search, create a task, answer a question), and replies through the bot. Without this, your bot is one-way only (Life Engine can send, but you can't interact).
 
 1. Install the Telegram plugin in Claude Code (it's `plugin:telegram` from the official plugins)
 2. Configure access via `/telegram:configure` with your bot token
@@ -148,11 +175,19 @@ Messages you send to the bot arrive as channel events in Claude Code, which rout
 
 ### Step 8: Connect Google Calendar
 
+**What**: Add the Google Calendar MCP connector so Claude can read your schedule.
+
+**Why**: The Life Engine needs your calendar to generate morning briefings ("you have 5 meetings today"), pre-meeting prep ("meeting with X in 30 min, here's context from your brain"), and evening summaries ("tomorrow starts with Y"). Without calendar access, the Life Engine can only surface tasks and habits.
+
 1. Go to [claude.ai/settings/connectors](https://claude.ai/settings/connectors)
 2. Add the Google Calendar MCP connector
 3. Authorize access to your calendar
 
 ### Step 9: Create the Scheduled Life Engine Trigger
+
+**What**: A scheduled remote trigger on claude.ai that fires 4x daily and sends you proactive briefings via Telegram.
+
+**Why**: The Life Engine is what makes this system proactive instead of reactive. Instead of you always asking Claude for information, it checks your calendar, tasks, and habits on a schedule and pushes relevant context to you. It runs on claude.ai's cloud infrastructure (not your Mac), so it works even if your Claude Code session is down. It sends Telegram messages via the `send_telegram_message()` SQL function in your database, bypassing the need for a local Telegram plugin.
 
 In Claude Code, use `/schedule` to create a remote trigger:
 
@@ -161,17 +196,27 @@ In Claude Code, use `/schedule` to create a remote trigger:
 - **Model**: claude-sonnet-4-6
 - **Prompt**: Copy the full prompt from `triggers/life-engine-prompt.md` (everything below the `---` line). Replace all `YOUR_*` placeholders with your actual values.
 
-The trigger runs on claude.ai's infrastructure, so it works even when your Mac is off. It sends Telegram messages via the `send_telegram_message()` SQL function in your database.
+The trigger needs three MCP connections:
+1. **Google Calendar** — to read your schedule
+2. **brain-stack** (your MCP connector from Step 5) — to search thoughts, list tasks, check habits
+3. **Supabase** — to run SQL directly (send Telegram messages, query/log briefings, check habits)
 
 ### Step 10: Test Everything
 
+**What**: Verify the full pipeline works end-to-end.
+
+**Why**: There are several moving parts (Supabase, MCP, Telegram plugin, scheduled triggers). Testing each interaction confirms the wiring is correct.
+
 In Telegram, message your bot:
-- "Remember: I want to build a personal knowledge system" — should capture a thought
-- "What do I know about knowledge systems?" — should search your brain
-- "Add task: Set up Life Engine" — should create a task
+- "Remember: I want to build a personal knowledge system" — should capture a thought via brain MCP
+- "What do I know about knowledge systems?" — should semantic search your brain and return results
+- "Add task: Set up Life Engine" — should create a task in life_engine_tasks
 - "List my tasks" — should show pending tasks
 
-Wait for the next scheduled trigger fire to confirm Life Engine briefings arrive.
+Then test the scheduled trigger:
+- In Claude Code, use `/schedule` and select "Run Now" for your Life Engine trigger
+- You should receive a Telegram briefing within 2-5 minutes
+- Check that it includes your calendar, tasks, and habits
 
 ## How It Works
 
