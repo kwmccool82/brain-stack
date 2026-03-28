@@ -221,14 +221,38 @@ Then test the scheduled trigger:
 ## How It Works
 
 ### Knowledge Capture
-- **Telegram**: Message your bot naturally. Claude Code receives it, decides if it's a thought/task/question, and routes accordingly.
-- **MCP**: Any Claude client (Claude.ai, Claude Code, API) can call `capture_thought` to save a thought with auto-generated embeddings and metadata.
-- **Documents**: Ingest PDFs, markdown, images via Claude Code — chunks are embedded for semantic search.
+
+There are three ways to get information into your brain:
+
+**1. Telegram conversations** — Message your bot naturally. Claude Code receives it, decides if it's a thought/task/question, and routes accordingly. "Remember that Dr. Smith prefers morning appointments" → captured as a thought with people/topic metadata.
+
+**2. MCP from any Claude client** — Any Claude session (Claude.ai, Claude Code, API) can call `capture_thought` to save a thought with auto-generated embeddings and metadata.
+
+**3. Document inbox processing** — Drop files (PDFs, markdown, images, text) into a synced folder (e.g., iCloud Drive) and tell Claude Code to process them. Claude reads each file, chunks it into ~500-token segments (heading/page-aware with overlap), extracts metadata (title, tags, topics, people, summary), generates embeddings for each chunk, and stores everything in the `documents` + `document_chunks` tables. The originals move to a `processed/` subfolder.
+
+To set up the document inbox:
+
+1. Create an inbox folder and a processed subfolder:
+   ```bash
+   mkdir -p ~/brain-inbox/processed
+   ```
+2. Optionally symlink to a cloud-synced folder (iCloud, Dropbox, etc.) so you can drop files from your phone:
+   ```bash
+   ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/brain-inbox ~/brain-inbox
+   ```
+3. Tell Claude Code to process the inbox:
+   ```
+   Process all files in ~/brain-inbox/
+   ```
+   Claude will read each file, chunk it, embed it, insert into Supabase, and move the original to `~/brain-inbox/processed/`. The chunked content becomes searchable alongside your thoughts — `search_thoughts` queries both thoughts and document chunks.
+
+This is a Claude Code workflow, not an automated pipeline. You drop files and tell Claude to process them when you're ready. No extra infrastructure needed.
 
 ### Knowledge Retrieval
-- **Semantic search**: `search_thoughts` uses pgvector cosine similarity across thoughts AND document chunks.
+- **Semantic search**: `search_thoughts` uses pgvector cosine similarity across thoughts AND document chunks in a unified query.
 - **Filtered listing**: `list_thoughts` with filters for type, topic, person, date range.
 - **Life Engine data**: `search_facts` queries briefings, check-ins, evolution history.
+- **Natural language**: Just ask via Telegram. "What do I know about the Johnson project?" → Claude searches your brain and responds with relevant thoughts and document excerpts.
 
 ### Proactive Briefings (Life Engine)
 - A scheduled trigger on claude.ai fires 4x daily (morning, mid-morning, afternoon, evening).
