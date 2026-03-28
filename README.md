@@ -40,13 +40,19 @@ A personal knowledge infrastructure that captures what you think, remembers what
 - **Storage**: All persistent data lives in Supabase (thoughts, documents, tasks, habits, briefings)
 - **Search**: Semantic search via pgvector embeddings (text-embedding-3-small through OpenRouter)
 
-## What You Need
+## Prerequisites
 
-- [Supabase](https://supabase.com) account (free tier works)
-- [OpenRouter](https://openrouter.ai) API key (for embeddings via text-embedding-3-small)
-- [Claude Code](https://claude.ai/claude-code) CLI installed and running on a Mac
-- [Telegram Bot](https://core.telegram.org/bots#botfather) (for Life Engine notifications and conversational input)
-- Google Calendar connected via [Claude.ai MCP connector](https://claude.ai/settings/connectors)
+You need these accounts and subscriptions before starting:
+
+| Prerequisite | What it's for | Cost |
+|---|---|---|
+| **Claude Pro/Team/Enterprise subscription** | Claude Code CLI requires a paid Anthropic plan | $20+/mo |
+| **Claude Code CLI** | The orchestrator — runs on your Mac, handles all routing | Included with Claude sub |
+| **Supabase account** | Database for all persistent data (thoughts, tasks, habits) | Free tier works |
+| **OpenRouter API key** | Embeddings (text-embedding-3-small) and metadata extraction (gpt-4o-mini) for the brain MCP server | Pay-per-use, ~$5 to start |
+| **Telegram account** | Create a bot for Life Engine notifications and conversational input | Free |
+| **Google account** | Calendar integration for meeting prep and briefings | Free |
+| **A Mac that stays on** | Claude Code runs continuously to handle Telegram messages | Any Mac (Mini recommended) |
 
 ## Setup
 
