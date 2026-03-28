@@ -1,17 +1,18 @@
 # Brain Stack
 
-Personal knowledge infrastructure. Supabase backend, MCP protocol, Telegram delivery.
+Personal knowledge infrastructure. Claude Code is the sole orchestrator — it handles all input/output via Telegram, stores knowledge in Supabase via the brain MCP edge function, and scheduled triggers on claude.ai deliver proactive Life Engine briefings.
 
 ## Quick Reference
 
 - Edge Functions: supabase/functions/
 - Schema migrations: schema/
 - Life Engine skill: skills/life-engine/SKILL.md
+- Trigger prompt: triggers/life-engine-prompt.md
 
 ## Database
 
 ### Supabase (project ref: YOUR_PROJECT_REF)
-- `thoughts` — atomic captures from Slack + MCP
+- `thoughts` — atomic captures via MCP
 - `documents` — parent records for ingested files
 - `document_chunks` — embedded segments with vectors (1536-dim, text-embedding-3-small via OpenRouter)
 - `schema_log` — migration history
@@ -46,7 +47,7 @@ Delivers briefings via Telegram based on time windows:
 - Chat ID: YOUR_CHAT_ID
 
 ### Google Calendar
-- Calendar ID: YOUR_EMAIL@gmail.com
+- Calendar ID: YOUR_CALENDAR_ID
 - Timezone: YOUR_TIMEZONE (e.g., America/Detroit)
 
 ### Task System
@@ -57,9 +58,6 @@ Delivers briefings via Telegram based on time windows:
 ```bash
 # MCP function MUST use --no-verify-jwt (MCP connector requires it)
 supabase functions deploy brain-mcp --use-api --project-ref YOUR_PROJECT_REF --no-verify-jwt
-
-# Non-MCP functions use default JWT verification
-supabase functions deploy ingest-thought --use-api --project-ref YOUR_PROJECT_REF
 ```
 
 ## Environment Variables (Edge Functions)
@@ -67,8 +65,6 @@ supabase functions deploy ingest-thought --use-api --project-ref YOUR_PROJECT_RE
 - SUPABASE_SERVICE_ROLE_KEY
 - OPENROUTER_API_KEY
 - MCP_ACCESS_KEY (brain-mcp only)
-- SLACK_BOT_TOKEN (ingest-thought only)
-- SLACK_CAPTURE_CHANNEL (ingest-thought only)
 
 ## Schema Migrations
 - Run migrations in order: 001, 002, 003, 004

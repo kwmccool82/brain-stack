@@ -21,7 +21,7 @@ create table if not exists schema_log (
 );
 
 -- ============================================================
--- THOUGHTS: Atomic captures from MCP, Slack, or any client
+-- THOUGHTS: Atomic captures via MCP from any client
 -- ============================================================
 create table if not exists thoughts (
   id uuid primary key default gen_random_uuid(),

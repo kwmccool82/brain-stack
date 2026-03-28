@@ -1,9 +1,3 @@
-[functions.ingest-thought]
-enabled = true
-verify_jwt = false
-import_map = "./functions/ingest-thought/deno.json"
-entrypoint = "./functions/ingest-thought/index.ts"
-
 [functions.brain-mcp]
 enabled = true
 verify_jwt = false
