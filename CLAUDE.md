@@ -54,6 +54,17 @@ Delivers briefings via Telegram based on time windows:
 - User says "add task: X" to add, "done: X" to complete
 - Morning briefings surface pending tasks automatically
 
+### Life Engine Response Handling
+
+The scheduled trigger sends briefings but CANNOT receive replies. The local Claude Code session handles the reply side. When a Telegram message arrives that looks like a response to a Life Engine briefing:
+
+- **Check-in replies**: Log to `life_engine_checkins`, mark briefing as `user_responded = true`, react with thumbs-up
+- **Habit confirmations** ("did my walk", "sunlight done"): Match to `life_engine_habits`, log to `life_engine_habit_log`, react with thumbs-up
+- **Self-improvement replies** (YES/NO): Update `life_engine_evolution` record, mark briefing responded
+- **Any briefing reply**: Mark the most recent matching briefing as `user_responded = true`
+
+Always check recent briefings to understand context when a Telegram message arrives.
+
 ## Deploying Edge Functions
 ```bash
 # MCP function MUST use --no-verify-jwt (MCP connector requires it)
